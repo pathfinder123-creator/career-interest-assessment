@@ -582,24 +582,24 @@ const CLUSTER_LABELS = {
 };
 
 const QUESTIONS = [
-  {t:"R",q:"Repairing or maintaining vehicles, engines, or machinery"},
-  {t:"R",q:"Building, installing, or fixing things with hand or power tools"},
-  {t:"R",q:"Operating equipment or doing hands-on physical work outdoors"},
-  {t:"I",q:"Researching how or why something works"},
-  {t:"I",q:"Solving complex problems using data, logic, or experiments"},
-  {t:"I",q:"Analyzing scientific findings or diagnosing a technical issue"},
-  {t:"A",q:"Designing, drawing, or creating original visual work"},
-  {t:"A",q:"Writing, composing music, or performing creatively"},
-  {t:"A",q:"Coming up with new, unconventional ideas or designs"},
   {t:"S",q:"Teaching, coaching, or explaining something to someone"},
-  {t:"S",q:"Helping someone work through a personal or health-related problem"},
-  {t:"S",q:"Volunteering or caring for people in your community"},
-  {t:"E",q:"Persuading others or selling an idea, product, or service"},
-  {t:"E",q:"Leading a team or managing a project to reach a goal"},
-  {t:"E",q:"Starting or running your own business"},
+  {t:"R",q:"Repairing or maintaining vehicles, engines, or machinery"},
   {t:"C",q:"Organizing records, files, schedules, or data"},
+  {t:"A",q:"Designing, drawing, or creating original visual work"},
+  {t:"I",q:"Researching how or why something works"},
+  {t:"E",q:"Persuading others or selling an idea, product, or service"},
+  {t:"I",q:"Solving complex problems using data, logic, or experiments"},
+  {t:"E",q:"Leading a team or managing a project to reach a goal"},
+  {t:"A",q:"Writing, composing music, or performing creatively"},
   {t:"C",q:"Following clear procedures and checking work for accuracy"},
-  {t:"C",q:"Managing budgets, spreadsheets, or detailed reports"}
+  {t:"S",q:"Helping someone work through a personal or health-related problem"},
+  {t:"R",q:"Building, installing, or fixing things with hand or power tools"},
+  {t:"C",q:"Managing budgets, spreadsheets, or detailed reports"},
+  {t:"A",q:"Coming up with new, unconventional ideas or designs"},
+  {t:"R",q:"Operating equipment or doing hands-on physical work outdoors"},
+  {t:"S",q:"Volunteering or caring for people in your community"},
+  {t:"E",q:"Starting or running your own business"},
+  {t:"I",q:"Analyzing scientific findings or diagnosing a technical issue"}
 ];
 
 const SCALE = [
@@ -629,11 +629,9 @@ function buildForm(){
   QUESTIONS.forEach((item, idx) => {
     const card = document.createElement('div');
     card.className = 'qcard';
-    const meta = TYPE_META[item.t];
     card.innerHTML = `
       <div class="qhead">
         <span class="qnum">Q${idx+1}/18</span>
-        <span class="qtype" style="background:${meta.hex}">${meta.name}</span>
       </div>
       <p class="qtext">${item.q}</p>
       <div class="scale" data-qindex="${idx}">
@@ -668,10 +666,10 @@ function updateProgress(){
     ? `Answer all 18 questions to unlock your results. (${answeredCount}/18 answered)`
     : "All set — see your results below.";
 
-  // fill progress bars per type-group (3 questions each)
+  // fill progress bars per type (3 questions each)
   HEX_ORDER.forEach((code, g) => {
-    let answeredInGroup = 0;
-    for(let k=g*3; k<g*3+3; k++){ if(answers[k] !== undefined) answeredInGroup++; }
+    const answeredInGroup = QUESTIONS.reduce((count, item, idx) =>
+      count + (item.t === code && answers[idx] !== undefined ? 1 : 0), 0);
     const seg = document.querySelectorAll('.progress-seg')[g];
     seg.querySelector('i').style.width = (answeredInGroup/3*100) + "%";
   });
