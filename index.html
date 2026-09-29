@@ -303,6 +303,7 @@
   .link-btn{background:none;border:none;color:var(--navy);font-weight:600;font-size:14px;cursor:pointer;text-decoration:underline;padding:0;}
   .link-btn:disabled{opacity:.5;cursor:wait;text-decoration:none;}
   .pdf-status{font-size:12.5px;color:var(--slate);margin-top:10px;min-height:16px;}
+  .print-selection-summary{display:none;}
 
   /* Mirrors the @media print hide-list, used while html2canvas captures the page for Save/Send */
   body.capturing-pdf .hero .btn,
@@ -317,9 +318,30 @@
   }
 
   @media print{
-    .hero .btn, .submit-row, #assessment, #code-entry, .retake-row, .btn{display:none !important;}
+    @page{margin:.55in;}
     body{background:#fff;}
-    #results{display:block !important;}
+    body > .hero,
+    #riasec-brief,
+    #code-entry,
+    #assessment,
+    .screen-result-options,
+    .retake-row,
+    footer{display:none !important;}
+    .wrap{max-width:none;margin:0;padding:0;}
+    #results{
+      display:block !important;
+      border:0;
+      box-shadow:none;
+      padding:0;
+      margin:0;
+    }
+    .results-hero{margin:0 0 24px;break-inside:avoid;}
+    .print-selection-summary{display:block !important;}
+    .print-selection-group{margin-top:22px;break-inside:avoid;}
+    .print-selection-group h3{font-size:18px;margin:0 0 8px;color:var(--navy);}
+    .print-selection-list{margin:0;padding-left:22px;}
+    .print-selection-list li{margin:0 0 6px;}
+    .print-none{color:var(--slate);font-style:italic;margin:0;}
   }
   @media (max-width:640px){
     .hero-inner{flex-direction:column;}
@@ -409,7 +431,9 @@
       </div>
     </div>
 
-    <div style="margin-bottom:40px;">
+    <div class="print-selection-summary" id="printSelectionSummary" aria-hidden="true"></div>
+
+    <div class="screen-result-options" style="margin-bottom:40px;">
       <div class="subhead">Occupations to explore</div>
       <div class="subnote">Common roles connected to your top interest areas — tap a role to view it on My Next Move (O*NET), and check any you're seriously considering.</div>
       <div class="occ-list" id="occList"></div>
@@ -420,7 +444,7 @@
       </div>
     </div>
 
-    <div>
+    <div class="screen-result-options">
       <div class="subhead">Matching Collin College programs</div>
       <div class="subnote">Ranked by how closely each program lines up with your results — check any you're seriously considering.</div>
       <div class="prog-grid" id="progGrid"></div>
@@ -432,7 +456,7 @@
     </div>
 
     <div class="retake-row">
-      <button class="link-btn" onclick="window.print()">Print</button> /
+      <button class="link-btn" id="printBtn">Print</button> /
       <button class="link-btn" id="saveBtn">Save</button> /
       <button class="link-btn" id="sendBtn">Send</button><span class="retake-row-text"> these results</span>
       &nbsp; &middot; &nbsp;
@@ -977,6 +1001,50 @@ async function handleSendClick(){
   });
 }
 
+function updatePrintSelectionSummary(){
+  const summary = document.getElementById('printSelectionSummary');
+  if(!summary) return;
+
+  const selectedOccupations = Array.from(
+    document.querySelectorAll('#occList .consider-toggle:checked')
+  ).map(input => input.closest('.occ-item')?.querySelector('.occ-pill')?.textContent.trim())
+   .filter(Boolean);
+
+  const selectedPrograms = Array.from(
+    document.querySelectorAll('#progGrid .consider-toggle:checked')
+  ).map(input => input.closest('.prog-card')?.querySelector('.ptitle')?.textContent.trim())
+   .filter(Boolean);
+
+  summary.replaceChildren();
+  [
+    ['Occupations I am considering', selectedOccupations],
+    ['Collin College programs I am considering', selectedPrograms]
+  ].forEach(([heading, items]) => {
+    const group = document.createElement('section');
+    group.className = 'print-selection-group';
+    const title = document.createElement('h3');
+    title.textContent = heading;
+    group.appendChild(title);
+
+    if(items.length){
+      const list = document.createElement('ul');
+      list.className = 'print-selection-list';
+      items.forEach(item => {
+        const li = document.createElement('li');
+        li.textContent = item;
+        list.appendChild(li);
+      });
+      group.appendChild(list);
+    } else {
+      const empty = document.createElement('p');
+      empty.className = 'print-none';
+      empty.textContent = 'No selections made.';
+      group.appendChild(empty);
+    }
+    summary.appendChild(group);
+  });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   buildForm();
   document.getElementById('submitBtn').addEventListener('click', showResults);
@@ -995,6 +1063,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.getElementById('saveBtn').addEventListener('click', handleSaveClick);
   document.getElementById('sendBtn').addEventListener('click', handleSendClick);
+  document.getElementById('printBtn').addEventListener('click', () => {
+    updatePrintSelectionSummary();
+    window.print();
+  });
+  window.addEventListener('beforeprint', updatePrintSelectionSummary);
 
   document.getElementById('retakeBtn').addEventListener('click', () => {
     document.getElementById('results').style.display = 'none';
