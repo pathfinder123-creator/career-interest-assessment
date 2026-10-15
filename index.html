@@ -150,6 +150,11 @@
     color:var(--slate);
     margin-bottom:8px;
   }
+  .assessment-direction{
+    background:#FFF4CC;border-left:5px solid #D6A51D;border-radius:10px;
+    color:var(--navy);font-size:26px;font-weight:700;line-height:1.35;
+    padding:18px 22px;margin:0 0 22px;
+  }
   .intro-grid{display:flex;gap:34px;flex-wrap:wrap;align-items:flex-start;}
   .intro-grid .col{flex:1 1 240px;}
   .type-chip{
@@ -371,6 +376,7 @@
     .print-none{color:var(--slate);font-style:italic;margin:0;}
   }
   @media (max-width:640px){
+    .assessment-direction{font-size:22px;padding:16px 18px;}
     .hero-inner{flex-direction:column;}
     .hero-hex{width:240px;}
     .results-hero{flex-direction:column;text-align:center;}
@@ -435,7 +441,7 @@
 
   <section class="block" id="assessment" style="padding-top:16px;">
     <div class="kicker">Part 1</div>
-    <h2 style="font-size:24px;margin-bottom:22px;">Rate each activity according to how interesting it is to you, not whether you can perform the activity or want to make a career of it.</h2>
+    <h2 class="assessment-direction">Rate each activity according to how interesting it is to you, not whether you can perform the activity or want to make a career of it.</h2>
     <div class="progress-track" id="progressTrack"></div>
     <form id="quizForm"></form>
     <div class="submit-row">
