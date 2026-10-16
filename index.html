@@ -259,7 +259,7 @@
     transform:translate(-50%,-50%);
   }
 
-  .occ-list{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-auto-rows:92px;gap:14px;margin-bottom:12px;}
+  .occ-list{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-auto-rows:112px;gap:14px;margin-bottom:12px;}
   .occ-item{display:flex;align-items:stretch;min-width:0;min-height:0;position:relative;}
   .occ-item .consider-toggle{position:absolute;left:13px;top:50%;transform:translateY(-50%);z-index:2;}
   .occ-pill{
@@ -268,6 +268,9 @@
     display:flex;align-items:center;gap:8px;
     color:var(--ink);text-decoration:none;cursor:pointer;width:100%;height:100%;min-width:0;
     transition:border-color .15s, box-shadow .15s, transform .15s;
+  }
+  .occ-pill > span:last-child{
+    min-width:0;line-height:1.3;overflow-wrap:anywhere;word-break:normal;
   }
   .occ-pill:hover{
     border-color:var(--navy);box-shadow:0 3px 10px rgba(10,47,135,.12);
@@ -472,7 +475,7 @@
 
     <div class="screen-result-options" style="margin-bottom:40px;">
       <div class="subhead">Occupations to explore</div>
-      <div class="subnote">Thirty Collin-aligned roles are organized across all three two-interest combinations in your code. Your first two interests lead the results, while the other pairings broaden the possibilities. Tap a role to view it on My Next Move (O*NET), and check any you're seriously considering.</div>
+      <div class="subnote">Thirty Collin-aligned roles progress from matches across your full code, to your strongest two-interest combination, to broader matches led by either of your top two interests. Tap a role to view it on My Next Move (O*NET), and check any you're seriously considering.</div>
       <div class="occ-list" id="occList"></div>
       <div class="occ-nav" aria-label="Occupation results navigation">
         <button class="occ-expand" id="occBackBtn" type="button" hidden>&larr; Back</button>
@@ -847,41 +850,104 @@ function renderResults(scores, ranked){
     return {name, soc, program, pathway, award, values, highPoint};
   });
 
-  // Build three pages of ten. Each page emphasizes one of the three possible
-  // two-letter combinations in the student's code, while retaining the order
-  // of the student's letters as a weighting signal. Exact two-letter O*NET
-  // high-point matches lead each page; score-based related matches fill gaps.
-  const pairDefinitions = [
-    [top3[0], top3[1]],
-    [top3[0], top3[2]],
-    [top3[1], top3[2]]
-  ];
+  // Build three student-facing tiers: the full three-letter pattern, the
+  // strongest two-letter combination, and balanced broader matches to either
+  // leading interest. Every occupation remains tied to a Collin pathway.
   const usedOccupationNames = new Set();
-  const occupationPages = pairDefinitions.map(([firstCode, secondCode]) => {
-    const rankedForPair = occupationPool.map(o => {
-      const firstValue = o.values[letterIndex(firstCode)] || 0;
-      const secondValue = o.values[letterIndex(secondCode)] || 0;
-      const includesBoth = o.highPoint.includes(firstCode) && o.highPoint.includes(secondCode);
-      const orderedPair = o.highPoint.startsWith(firstCode + secondCode);
-      const reversePair = o.highPoint.startsWith(secondCode + firstCode);
-      const pairScore = firstValue * .56 + secondValue * .44 +
-        (includesBoth ? 3.2 : 0) + (orderedPair ? .7 : reversePair ? .45 : 0);
-      return {...o, pairScore, pairCodes:[firstCode, secondCode]};
-    }).sort((a,b) => b.pairScore - a.pairScore || a.name.localeCompare(b.name));
+  const primaryProgram = o => (o.program || '').split('|')[0];
+  const addUnique = (page, o, programCap = Infinity) => {
+    const program = primaryProgram(o);
+    const programCount = page.filter(item => primaryProgram(item) === program).length;
+    if(page.length < 10 && !usedOccupationNames.has(o.name) && programCount < programCap){
+      usedOccupationNames.add(o.name);
+      page.push(o);
+      return true;
+    }
+    return false;
+  };
+  const addCandidates = (page, candidates, programCap = 1) => {
+    candidates.forEach(o => addUnique(page, o, programCap));
+    if(page.length < 10) candidates.forEach(o => addUnique(page, o));
+  };
 
-    const page = [];
-    const addToPage = o => {
-      if(page.length < 10 && !usedOccupationNames.has(o.name)){
-        usedOccupationNames.add(o.name);
-        page.push(o);
-      }
-    };
-    rankedForPair
-      .filter(o => o.highPoint.includes(firstCode) && o.highPoint.includes(secondCode))
-      .forEach(addToPage);
-    rankedForPair.forEach(addToPage);
-    return page;
-  });
+  const fullCodeRanking = occupationPool.map(o => {
+    const matchedCount = top3.filter(code => o.highPoint.includes(code)).length;
+    const containsAllThree = matchedCount === 3;
+    const exactOrder = o.highPoint.startsWith(top3.join(''));
+    const positionFit = top3.reduce((score, code, index) => {
+      const occupationIndex = o.highPoint.indexOf(code);
+      return score + (occupationIndex < 0 ? 0 : Math.max(0, 3 - Math.abs(occupationIndex - index)));
+    }, 0);
+    const fullCodeScore = (o.values[letterIndex(top3[0])] || 0) * .46 +
+      (o.values[letterIndex(top3[1])] || 0) * .34 +
+      (o.values[letterIndex(top3[2])] || 0) * .20 + matchedCount * 1.2 +
+      (exactOrder ? 2 : 0) + positionFit * .12;
+    return {...o, matchedCount, containsAllThree, exactOrder, fullCodeScore};
+  }).sort((a,b) => b.fullCodeScore - a.fullCodeScore || a.name.localeCompare(b.name));
+  const fullCodePage = [];
+  const allThreeMatches = fullCodeRanking.filter(o => o.containsAllThree);
+  const thirdLetterPairs = fullCodeRanking.filter(o =>
+    o.matchedCount >= 2 && o.highPoint.includes(top3[2]) &&
+    (o.highPoint.includes(top3[0]) || o.highPoint.includes(top3[1]))
+  );
+  addCandidates(fullCodePage, allThreeMatches);
+  addCandidates(fullCodePage, thirdLetterPairs);
+
+  const topPairRanking = occupationPool.map(o => {
+    const first = o.values[letterIndex(top3[0])] || 0;
+    const second = o.values[letterIndex(top3[1])] || 0;
+    const includesBoth = o.highPoint.includes(top3[0]) && o.highPoint.includes(top3[1]);
+    const pairScore = first * .56 + second * .44 + (includesBoth ? 3.2 : 0) +
+      (o.highPoint.startsWith(top3[0] + top3[1]) ? .7 : o.highPoint.startsWith(top3[1] + top3[0]) ? .45 : 0);
+    return {...o, pairScore};
+  }).sort((a,b) => b.pairScore - a.pairScore || a.name.localeCompare(b.name));
+  const topPairPage = [];
+  const topPairMatches = topPairRanking.filter(o =>
+    o.highPoint.includes(top3[0]) && o.highPoint.includes(top3[1])
+  );
+  addCandidates(topPairPage, topPairMatches);
+
+  const broaderPage = [];
+  const singleLetterRankings = top3.slice(0,2).map(code => occupationPool.map(o => {
+    const value = o.values[letterIndex(code)] || 0;
+    const singleScore = value + (o.highPoint.startsWith(code) ? 1 : o.highPoint.includes(code) ? .5 : 0);
+    return {...o, singleScore};
+  }).filter(o =>
+    o.highPoint.includes(code) &&
+    !(o.highPoint.includes(top3[0]) && o.highPoint.includes(top3[1])) &&
+    !usedOccupationNames.has(o.name)
+  )
+    .sort((a,b) => b.singleScore - a.singleScore || a.name.localeCompare(b.name)));
+  const broaderProgramCounts = new Map();
+  const addBalancedCandidate = ranking => {
+    let candidate = ranking.find(o =>
+      !usedOccupationNames.has(o.name) &&
+      (broaderProgramCounts.get(primaryProgram(o)) || 0) < 2
+    );
+    if(!candidate) candidate = ranking.find(o => !usedOccupationNames.has(o.name));
+    if(candidate && addUnique(broaderPage, candidate)){
+      const program = primaryProgram(candidate);
+      broaderProgramCounts.set(program, (broaderProgramCounts.get(program) || 0) + 1);
+    }
+  };
+  for(let round=0; round<5; round++){
+    singleLetterRankings.forEach(addBalancedCandidate);
+  }
+
+  // Only after all three core groups are assigned do ranked fallbacks fill
+  // open positions. This preserves the meaning of each set as far as the
+  // available Collin-aligned occupation pool allows.
+  addCandidates(fullCodePage, fullCodeRanking.filter(o => o.matchedCount >= 2));
+  addCandidates(fullCodePage, fullCodeRanking);
+  addCandidates(topPairPage, topPairRanking);
+  while(broaderPage.length < 10){
+    const before = broaderPage.length;
+    singleLetterRankings.forEach(addBalancedCandidate);
+    if(broaderPage.length === before) break;
+  }
+
+  const occupationPages = [fullCodePage, topPairPage, broaderPage];
+  const occupationPageLabels = ['Your full interest pattern', 'Your strongest combination', 'Broader matches to your leading interests'];
   const shownOccupations = occupationPages.flat();
   selectedOccupationNames = new Set();
   const occList = document.getElementById('occList');
@@ -904,8 +970,7 @@ function renderResults(scores, ranked){
         </a>
       </div>`;
     }).join('');
-    const [a,b] = pairDefinitions[occupationPage];
-    occPageStatus.textContent = `Page ${occupationPage + 1} of ${occupationPages.length} · ${TYPE_META[a].name} + ${TYPE_META[b].name}`;
+    occPageStatus.textContent = `Set ${occupationPage + 1} of ${occupationPages.length} · ${occupationPageLabels[occupationPage]}`;
     occBackBtn.hidden = occupationPage === 0;
     occMoreBtn.hidden = occupationPage === occupationPages.length - 1;
   }
