@@ -294,6 +294,11 @@
   .prog-card{
     background:var(--card);border:1px solid var(--line);border-radius:12px;
     padding:16px 18px;display:flex;flex-direction:column;gap:8px;
+    transition:background-color .2s,border-color .2s,box-shadow .2s;
+  }
+  .prog-card.occupation-selected-match{
+    background:#FFF7D6;border-color:#D6A51D;
+    box-shadow:0 4px 14px rgba(148,105,0,.14);
   }
   .prog-card .ptitle{font-weight:600;font-size:15px;}
   .prog-card a{font-size:13.5px;font-weight:600;text-decoration:none;}
@@ -869,7 +874,7 @@ function renderResults(scores, ranked){
   const occList = document.getElementById('occList');
   occList.innerHTML = shownOccupations.map((o,idx) => `
     <div class="occ-item${idx >= 12 ? ' is-extra' : ''}">
-      <input type="checkbox" class="consider-toggle" id="occ-toggle-${idx}" aria-label="I'm considering ${o.name}" title="I'm considering this">
+      <input type="checkbox" class="consider-toggle" id="occ-toggle-${idx}" data-occupation="${encodeURIComponent(o.name)}" aria-label="I'm considering ${o.name}" title="I'm considering this">
       <a class="occ-pill" href="https://www.mynextmove.org/profile/summary/${encodeURIComponent(o.soc)}" target="_blank" rel="noopener">
         <span class="occ-codes" title="${(o.highPoint || '').split('').map(code => TYPE_META[code]?.name).filter(Boolean).join(' · ')}">
           ${(o.highPoint || top3.slice(0,2).join('')).split('').map(code => `<span style="background:${TYPE_META[code].hex}">${code}</span>`).join('')}
@@ -926,7 +931,7 @@ function renderResults(scores, ranked){
 
   const grid = document.getElementById('progGrid');
   grid.innerHTML = scored.map((p,idx) => `
-    <div class="prog-card">
+    <div class="prog-card" data-matched-occupations="${p._matchedOccupations.map(name => encodeURIComponent(name)).join(' ')}">
       <div class="ptitle">${p.name === 'Psychology' ? 'Psychology — AA Field of Study' : p.name}</div>
       ${p._matchedOccupations.length ? `<div class="occ-match-note">Matches: ${p._matchedOccupations.join(', ')}</div>` : ''}
       <label class="prog-consider">
@@ -937,8 +942,25 @@ function renderResults(scores, ranked){
     </div>
   `).join('');
 
+  occList.onchange = updateProgramHighlights;
+  updateProgramHighlights();
+
   document.getElementById('results').style.display = 'block';
   document.getElementById('results').scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+function updateProgramHighlights(){
+  const selectedOccupations = new Set(
+    Array.from(document.querySelectorAll('#occList .consider-toggle:checked'))
+      .map(input => input.dataset.occupation)
+      .filter(Boolean)
+  );
+  document.querySelectorAll('#progGrid .prog-card').forEach(card => {
+    const matchedOccupations = (card.dataset.matchedOccupations || '').split(' ').filter(Boolean);
+    card.classList.toggle('occupation-selected-match',
+      matchedOccupations.some(name => selectedOccupations.has(name))
+    );
+  });
 }
 
 function showResults(){
