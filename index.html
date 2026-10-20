@@ -851,6 +851,18 @@ function renderResults(scores, ranked){
     return {name, soc, program, pathway, award, values, highPoint};
   });
 
+  // All occupations already have a Collin pathway. Reward the specificity of
+  // documented alignment, not merely its existence; transfer areas of study
+  // and workforce credentials receive identical treatment.
+  const pathwayBonus = o => {
+    const linked = (OCCUPATION_PROGRAMS[o.name] || []).filter(Boolean);
+    const programs = (o.program || '').split('|').map(x => x.trim()).filter(Boolean);
+    const explicitLinks = linked.filter(name => programs.includes(name)).length;
+    // Explicit occupation-to-program/transfer-field mappings are stronger
+    // evidence than a general pathway label. Cap bonuses so interests dominate.
+    return explicitLinks ? 0.45 + Math.min(explicitLinks - 1, 2) * 0.12 : 0;
+  };
+
   // Build three student-facing tiers: the full three-letter pattern, the
   // strongest two-letter combination, and balanced broader matches to either
   // leading interest. Every occupation remains tied to a Collin pathway.
@@ -882,7 +894,7 @@ function renderResults(scores, ranked){
     const fullCodeScore = (o.values[letterIndex(top3[0])] || 0) * .46 +
       (o.values[letterIndex(top3[1])] || 0) * .34 +
       (o.values[letterIndex(top3[2])] || 0) * .20 + matchedCount * 1.2 +
-      (exactOrder ? 2 : 0) + positionFit * .12;
+      (exactOrder ? 2 : 0) + positionFit * .12 + pathwayBonus(o);
     return {...o, matchedCount, containsAllThree, exactOrder, fullCodeScore};
   }).sort((a,b) => b.fullCodeScore - a.fullCodeScore || a.name.localeCompare(b.name));
   const fullCodePage = [];
@@ -909,7 +921,7 @@ function renderResults(scores, ranked){
         o.highPoint.startsWith(secondCode + firstCode) ? .45 : 0;
       return Math.max(best, pair.weight * (first * .56 + second * .44 + 3.2 + orderBonus));
     }, 0);
-    return {...o, pairScore, matchingPairs};
+    return {...o, pairScore: pairScore + (matchingPairs.length ? pathwayBonus(o) : 0), matchingPairs};
   }).sort((a,b) => b.pairScore - a.pairScore || a.name.localeCompare(b.name));
   const topPairPage = [];
   const topPairMatches = topPairRanking.filter(o => o.matchingPairs.length > 0);
@@ -919,7 +931,7 @@ function renderResults(scores, ranked){
   const singleLetterRankings = top3.slice(0,2).map(code => occupationPool.map(o => {
     const value = o.values[letterIndex(code)] || 0;
     const singleScore = value + (o.highPoint.startsWith(code) ? 1 : o.highPoint.includes(code) ? .5 : 0);
-    return {...o, singleScore};
+    return {...o, singleScore: singleScore + pathwayBonus(o)};
   }).filter(o =>
     o.highPoint.includes(code) &&
     !(o.highPoint.includes(top3[0]) && o.highPoint.includes(top3[1])) &&
