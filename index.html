@@ -843,7 +843,7 @@ function renderResults(scores, ranked){
     TYPE_META[top3[0]].name + " / " + TYPE_META[top3[1]].name +
     " \u2014 " + (CLUSTER_LABELS[top3[0]+top3[1]] || (TYPE_META[top3[0]].name + " & " + TYPE_META[top3[1]].name));
   document.getElementById('combinationSummary').textContent =
-    `Strongest combination: ${TYPE_META[top3[0]].name} + ${TYPE_META[top3[1]].name} · ${TYPE_META[top3[2]].name} refines the matches`;
+    `Strongest combination: ${TYPE_META[top3[0]].name} + ${TYPE_META[top3[1]].name} · All three interest pairs are considered`;
 
   const letterIndex = code => HEX_ORDER.indexOf(code);
   const occupationPool = COLLIN_OCCUPATIONS.concat(RESTORED_OCCUPATIONS).map(row => {
@@ -889,18 +889,30 @@ function renderResults(scores, ranked){
   const allThreeMatches = fullCodeRanking.filter(o => o.containsAllThree);
   addCandidates(fullCodePage, allThreeMatches);
 
+  // Consider all three distinct pairs. The leading pair receives the greatest
+  // weight; pairs involving the third interest broaden discovery without
+  // displacing the strongest matches.
+  const interestPairs = [
+    {codes:[top3[0], top3[1]], weight:1},
+    {codes:[top3[0], top3[2]], weight:.78},
+    {codes:[top3[1], top3[2]], weight:.68}
+  ];
   const topPairRanking = occupationPool.map(o => {
-    const first = o.values[letterIndex(top3[0])] || 0;
-    const second = o.values[letterIndex(top3[1])] || 0;
-    const includesBoth = o.highPoint.includes(top3[0]) && o.highPoint.includes(top3[1]);
-    const pairScore = first * .56 + second * .44 + (includesBoth ? 3.2 : 0) +
-      (o.highPoint.startsWith(top3[0] + top3[1]) ? .7 : o.highPoint.startsWith(top3[1] + top3[0]) ? .45 : 0);
-    return {...o, pairScore};
+    const matchingPairs = interestPairs.filter(pair =>
+      pair.codes.every(code => o.highPoint.includes(code))
+    );
+    const pairScore = matchingPairs.reduce((best, pair) => {
+      const [firstCode, secondCode] = pair.codes;
+      const first = o.values[letterIndex(firstCode)] || 0;
+      const second = o.values[letterIndex(secondCode)] || 0;
+      const orderBonus = o.highPoint.startsWith(firstCode + secondCode) ? .7 :
+        o.highPoint.startsWith(secondCode + firstCode) ? .45 : 0;
+      return Math.max(best, pair.weight * (first * .56 + second * .44 + 3.2 + orderBonus));
+    }, 0);
+    return {...o, pairScore, matchingPairs};
   }).sort((a,b) => b.pairScore - a.pairScore || a.name.localeCompare(b.name));
   const topPairPage = [];
-  const topPairMatches = topPairRanking.filter(o =>
-    o.highPoint.includes(top3[0]) && o.highPoint.includes(top3[1])
-  );
+  const topPairMatches = topPairRanking.filter(o => o.matchingPairs.length > 0);
   addCandidates(topPairPage, topPairMatches);
 
   const broaderPage = [];
@@ -931,7 +943,7 @@ function renderResults(scores, ranked){
   }
 
   const occupationPages = [fullCodePage, topPairPage, broaderPage];
-  const occupationPageLabels = ['Your full interest pattern', 'Your strongest combination', 'Broader matches to your leading interests'];
+  const occupationPageLabels = ['Your full interest pattern', 'Matches across all three interest pairs', 'Broader matches to your leading interests'];
   const shownOccupations = occupationPages.flat();
   selectedOccupationNames = new Set();
   const occList = document.getElementById('occList');
