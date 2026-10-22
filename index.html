@@ -1,6 +1,15 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-CMK8B1097T"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-CMK8B1097T');
+</script>
+
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Career Interest Assessment | Collin College Career Center</title>
@@ -694,6 +703,14 @@ const SCALE = [
 ];
 
 const answers = {};
+// Aggregate analytics only: no answers, interest codes, names, or program titles sent.
+let assessmentStartTracked = false;
+function trackAssessmentEvent(eventName, parameters = {}) {
+  if (typeof window.gtag === 'function') {
+    window.gtag('event', eventName, parameters);
+  }
+}
+
 
 function buildForm(){
   const form = document.getElementById('quizForm');
@@ -734,6 +751,10 @@ function buildForm(){
       scaleDiv.querySelectorAll('label').forEach(l => l.classList.remove('checked'));
       e.target.closest('label').classList.add('checked');
       const qi = parseInt(scaleDiv.dataset.qindex, 10);
+      if (!assessmentStartTracked) {
+        assessmentStartTracked = true;
+        trackAssessmentEvent('assessment_started');
+      }
       answers[qi] = parseInt(e.target.value, 10);
       updateProgress();
     }
@@ -1061,6 +1082,7 @@ function showResults(){
   const scores = scoreAnswers();
   const ranked = Object.keys(scores).sort((a,b) => scores[b]-scores[a]);
   renderResults(scores, ranked);
+  trackAssessmentEvent('assessment_completed', {completion_method: 'questionnaire'});
 }
 
 function showResultsFromCode(){
@@ -1091,6 +1113,7 @@ function showResultsFromCode(){
   letters.forEach((c, i) => scores[c] = weights[i] ?? 6);
 
   renderResults(scores, ranked);
+  trackAssessmentEvent('results_viewed', {completion_method: 'entered_code'});
 }
 
 /* ---------- Save / Send as PDF ----------
@@ -1255,6 +1278,16 @@ function updatePrintSelectionSummary(){
 document.addEventListener('DOMContentLoaded', () => {
   buildForm();
   document.getElementById('submitBtn').addEventListener('click', showResults);
+  // Delegate clicks because occupation and program links are generated dynamically.
+  document.getElementById('results').addEventListener('click', (event) => {
+    const link = event.target.closest('a');
+    if (!link) return;
+    if (link.closest('#occList') && link.classList.contains('occ-pill')) {
+      trackAssessmentEvent('occupation_selected');
+    } else if (link.closest('#progGrid') && link.href) {
+      trackAssessmentEvent('program_link_clicked');
+    }
+  });
 
   const codeInput = document.getElementById('hollandCodeInput');
   const codeGoBtn = document.getElementById('codeGoBtn');
