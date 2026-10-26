@@ -510,6 +510,16 @@
       </div>
     </div>
 
+    <div class="screen-result-options" id="continueLater" style="margin:30px 0 12px;padding:22px;border:1px solid var(--line);border-radius:14px;background:#fff;">
+      <h3 style="font-size:21px">Continue your exploration later</h3>
+      <p style="font-size:14px;color:var(--slate)">Email or copy a link that restores your interest results and the occupations and Collin College programs you selected. Open it on another device to continue where you left off.</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button type="button" class="btn btn-navy" id="emailResumeBtn">Email my results &amp; continue later</button>
+        <button type="button" class="btn btn-navy" id="copyResumeBtn">Copy my results link</button>
+      </div>
+      <p style="font-size:12px;color:var(--slate)">Your results and selections are included in the link, not stored by this tool. Anyone with the link can view them. Email opens your device's mail app; you choose the recipient and send it.</p>
+      <div id="resumeStatus" role="status" aria-live="polite" style="font-size:13px;color:var(--navy)"></div>
+    </div>
     <div class="retake-row">
       <button class="link-btn" id="printBtn">Print</button> /
       <button class="link-btn" id="saveBtn">Save</button> /
@@ -849,9 +859,14 @@ function matchScore(prog, ranked){
 }
 
 let selectedOccupationNames = new Set();
+let activeResultCode = "";
+let activeResultScores = null;
+let currentOccupationPage = 0;
 
 function renderResults(scores, ranked){
   const top3 = ranked.slice(0,3);
+  activeResultCode = top3.join("");
+  activeResultScores = {...scores};
 
   drawHexOverlay(document.getElementById('resultHex'), scores);
 
@@ -986,6 +1001,7 @@ function renderResults(scores, ranked){
   let occupationPage = 0;
 
   function renderOccupationPage(){
+    currentOccupationPage = occupationPage;
     const page = occupationPages[occupationPage];
     occList.innerHTML = page.length ? page.map((o,idx) => {
       const encodedName = encodeURIComponent(o.name);
@@ -1275,8 +1291,82 @@ function updatePrintSelectionSummary(){
   });
 }
 
+/* Shareable, serverless results snapshot. Hash fragments are not sent in HTTP requests. */
+function makeResumeLink(){
+  if(!activeResultCode) throw new Error('View results before creating a link.');
+  const programs = Array.from(document.querySelectorAll('#progGrid .consider-toggle:checked'))
+    .map(el => el.closest('.prog-card')?.querySelector('.ptitle')?.textContent.trim()).filter(Boolean);
+  const payload = {v:1,c:activeResultCode,s:activeResultScores,
+    o:Array.from(selectedOccupationNames),p:programs,page:currentOccupationPage};
+  const bytes = new TextEncoder().encode(JSON.stringify(payload));
+  let binary = '';
+  bytes.forEach(byte => binary += String.fromCharCode(byte));
+  const token = btoa(binary).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+  const url = new URL(window.location.href);
+  url.hash = 'resume=' + token;
+  return url.toString();
+}
+function restoreResumeLink(){
+  const match = window.location.hash.match(/^#resume=([A-Za-z0-9_-]+)$/);
+  if(!match) return;
+  try{
+    const token = match[1].replace(/-/g,'+').replace(/_/g,'/');
+    const bytes = Uint8Array.from(atob(token), char => char.charCodeAt(0));
+    const state = JSON.parse(new TextDecoder().decode(bytes));
+    if(state.v !== 1 || !/^[RIASEC]{3}$/.test(state.c) || new Set(state.c).size !== 3 ||
+       !Array.isArray(state.o) || !Array.isArray(state.p) || state.o.length > 100 || state.p.length > 200)
+      throw new Error('Invalid saved results');
+    const ranked = state.c.split('').concat(HEX_ORDER.filter(c => !state.c.includes(c)));
+    const scores = {};
+    HEX_ORDER.forEach(c => scores[c] = Number.isFinite(state.s?.[c]) ? Math.max(0,Math.min(15,state.s[c])) : 2);
+    renderResults(scores,ranked);
+    const allowed = new Set(Array.from(document.querySelectorAll('#occList [data-occupation]')).map(el => el.dataset.occupation));
+    // Occupation selections may be on other pages; restore by the saved name identifiers.
+    selectedOccupationNames = new Set(state.o.filter(v => typeof v === 'string' && v.length < 300));
+    const selectedPrograms = new Set(state.p.filter(v => typeof v === 'string'));
+    document.querySelectorAll('#progGrid .prog-card').forEach(card => {
+      const name = card.querySelector('.ptitle')?.textContent.trim();
+      const input = card.querySelector('.consider-toggle');
+      if(input) input.checked = selectedPrograms.has(name);
+    });
+    const page = Math.max(0,Math.min(2,Number.isInteger(state.page) ? state.page : 0));
+    for(let i=0;i<page;i++) document.getElementById('occMoreBtn').click();
+    document.querySelectorAll('#occList [data-occupation]').forEach(input => input.checked = selectedOccupationNames.has(input.dataset.occupation));
+    updateProgramHighlights();
+    document.getElementById('resumeStatus').textContent = 'Your saved results and selections have been restored. You can keep exploring and generate a new link at any time.';
+    document.getElementById('results').scrollIntoView({behavior:'auto',block:'start'});
+  }catch(err){
+    document.getElementById('codeError').textContent = 'This saved-results link could not be opened. Please request a new link.';
+  }
+}
+function resumeEmail(){
+  try{
+    const link = makeResumeLink();
+    const body = 'Open this link to continue my Collin College Career Interest Assessment exploration with my selected occupations and programs restored:\n\n' + link + '\n\nRIASEC code: ' + activeResultCode + '\n\nThis link contains my results and selections; please do not forward it.';
+    window.location.href = 'mailto:?subject=' + encodeURIComponent('My Career Interest Assessment results — continue later') + '&body=' + encodeURIComponent(body);
+    document.getElementById('resumeStatus').textContent = 'Your email application should open with a prepared message. Choose your recipient and send it.';
+  }catch(err){document.getElementById('resumeStatus').textContent = err.message;}
+}
+async function resumeCopy(){
+  try{
+    const link = makeResumeLink();
+    if(navigator.clipboard && window.isSecureContext) await navigator.clipboard.writeText(link);
+    else {
+      const field = document.createElement('textarea'); field.value = link;
+      field.style.position='fixed'; field.style.opacity='0'; document.body.appendChild(field);
+      field.select();
+      if(!document.execCommand('copy')) throw new Error('Clipboard unavailable');
+      field.remove();
+    }
+    document.getElementById('resumeStatus').textContent = 'Results link copied. Paste it into a message or save it for later.';
+  }catch(err){document.getElementById('resumeStatus').textContent = 'Copy was unavailable. Try Email my results instead.';}
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   buildForm();
+  document.getElementById("emailResumeBtn").addEventListener("click",resumeEmail);
+  document.getElementById("copyResumeBtn").addEventListener("click",resumeCopy);
+  restoreResumeLink();
   document.getElementById('submitBtn').addEventListener('click', showResults);
   // Delegate clicks because occupation and program links are generated dynamically.
   document.getElementById('results').addEventListener('click', (event) => {
@@ -1311,6 +1401,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.getElementById('retakeBtn').addEventListener('click', () => {
     document.getElementById('results').style.display = 'none';
+    if(window.location.hash.startsWith('#resume=')) history.replaceState(null,'',window.location.pathname + window.location.search);
     document.getElementById('quizForm').reset();
     Object.keys(answers).forEach(k => delete answers[k]);
     document.querySelectorAll('.scale label').forEach(l => l.classList.remove('checked'));
