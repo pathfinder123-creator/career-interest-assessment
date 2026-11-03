@@ -398,7 +398,21 @@
     .occ-list{grid-template-columns:1fr;}
   }
   @media (min-width:641px) and (max-width:900px){.occ-list{grid-template-columns:repeat(2,minmax(0,1fr));}}
+
+/* Personalized vocational-intelligence descriptions */
+.vi-section{margin:18px 0 26px}.vi-section h3{margin:0 0 6px}.vi-intro{color:#5b6472;font-size:14px;margin:0 0 13px}.vi-detail{border:1px solid #dce4f0;border-radius:11px;background:#fff;margin:8px 0;overflow:hidden}.vi-detail summary{display:flex;align-items:center;gap:10px;padding:13px 15px;cursor:pointer;list-style:none}.vi-detail summary::-webkit-details-marker{display:none}.vi-detail summary:after{content:'+';margin-left:auto;font-weight:800;font-size:19px;color:#526581}.vi-detail[open] summary:after{content:'−'}.vi-letter{display:inline-flex;align-items:center;justify-content:center;flex:0 0 30px;width:30px;height:30px;border-radius:7px;color:white;font-weight:800}.vi-heading{display:flex;flex-direction:column;line-height:1.35}.vi-heading small{color:#5b6472;font-weight:500}.vi-detail p{margin:0;padding:0 15px 15px 55px;line-height:1.65}.vi-detail summary:focus-visible{outline:3px solid #0c2e82;outline-offset:-3px}@media(max-width:600px){.vi-detail p{padding-left:15px}}
 </style>
+<script>
+const VOCATIONAL_INTELLIGENCE_DESCRIPTIONS = {"R": ["Realistic", "Practical Intelligence", "You enjoy working with your hands, being outdoors, using tools, and operating machinery. You have a natural interest in how things work and a knack for building, handling, and fixing things. Your practical intelligence helps you solve problems through hands-on activity and produce useful, tangible results."], "I": ["Investigative", "Analytical Intelligence", "You enjoy asking questions, exploring ideas, gathering information, and figuring out why things happen. You are curious about how the world works and like solving problems that require careful thought and investigation. Your analytical intelligence helps you recognize patterns, evaluate evidence, and discover explanations and solutions."], "A": ["Artistic", "Creative Intelligence", "You enjoy imagining possibilities, expressing ideas, designing, and creating something original. You appreciate opportunities to use your imagination and explore different ways of seeing or doing things. Your creative intelligence helps you recognize possibilities, develop fresh ideas, and bring imagination into meaningful expression."], "S": ["Social", "Relational Intelligence", "You enjoy helping, teaching, encouraging, and working with other people. You are interested in understanding people’s needs, building relationships, and making a positive difference in their lives. Your relational intelligence helps you connect with others, communicate with understanding, and support their learning, growth, and well-being."], "E": ["Enterprising", "Strategic Intelligence", "You enjoy taking initiative, influencing others, leading activities, and turning ideas into action. You are drawn to opportunities to make decisions, pursue goals, and inspire others to work toward a shared purpose. Your strategic intelligence helps you recognize opportunities, anticipate possibilities, and manage people and resources to achieve results."], "C": ["Conventional", "Organizing Intelligence", "You enjoy organizing information, managing details, following procedures, and keeping things running smoothly. You appreciate accuracy, consistency, and creating order out of complexity. Your organizing intelligence helps you recognize structure, develop reliable systems, and manage information and activities with care and efficiency."]};
+const VOCATIONAL_INTELLIGENCE_COLORS = {R:'#3AB54A',I:'#BC1E2D',A:'#FCB042',S:'#93268F',E:'#F15928',C:'#1D75BC'};
+function vocationalIntelligenceMarkup(code){
+  const letters=[...String(code||'').toUpperCase()].filter((l,i,a)=>VOCATIONAL_INTELLIGENCE_DESCRIPTIONS[l]&&a.indexOf(l)===i).slice(0,3);
+  if(!letters.length)return '';
+  const escapeText=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  return '<section class="vi-section" aria-label="Explore your interest categories"><h3>Explore your interest categories</h3><p class="vi-intro">Your interest code highlights three types of activities you enjoy and the forms of intelligence you may prefer to engage. Select each category to learn more.</p>'+
+    letters.map(l=>{const [name,intelligence,description]=VOCATIONAL_INTELLIGENCE_DESCRIPTIONS[l];return '<details class="vi-detail"><summary><span class="vi-letter" style="background:'+VOCATIONAL_INTELLIGENCE_COLORS[l]+';color:'+(l==='A'?'#1b2430':'white')+'">'+l+'</span><span class="vi-heading"><strong>'+escapeText(name)+'</strong><small>'+escapeText(intelligence)+'</small></span></summary><p>'+escapeText(description)+'</p></details>';}).join('')+'</section>';
+}
+</script>
 </head>
 <body>
 
@@ -478,6 +492,8 @@
         <div class="combination-summary" id="combinationSummary"></div>
       </div>
     </div>
+
+    <div id="vocationalIntelligenceResults"></div>
 
     <div class="print-selection-summary" id="printSelectionSummary" aria-hidden="true"></div>
 
@@ -861,6 +877,7 @@ function renderResults(scores, ranked){
   const top3 = ranked.slice(0,3);
   activeResultCode = top3.join("");
   activeResultScores = {...scores};
+  document.getElementById('vocationalIntelligenceResults').innerHTML = vocationalIntelligenceMarkup(top3.join(''));
 
   drawHexOverlay(document.getElementById('resultHex'), scores);
 
@@ -1407,5 +1424,6 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 });
 </script>
+
 </body>
 </html>
