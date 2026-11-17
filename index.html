@@ -675,6 +675,12 @@ const OCCUPATION_PROGRAMS = {
   "Administrative Services Managers": ["Business Management", "Business Office Support Systems"]
 };
 
+// Stable O*NET-SOC keyed links take precedence over occupation-name aliases.
+// This also protects links when display names differ between data sources.
+const OCCUPATION_PROGRAMS_BY_SOC = {
+  "29-2034.00": ["Radiologic Technology"]
+};
+
 const CLUSTER_LABELS = {
   "RI":"STEM & Technical Careers","IR":"STEM & Technical Careers",
   "IA":"Creative Technology & Design","AI":"Creative Technology & Design",
@@ -902,7 +908,7 @@ function renderResults(scores, ranked){
   // documented alignment, not merely its existence; transfer areas of study
   // and workforce credentials receive identical treatment.
   const pathwayBonus = o => {
-    const linked = (OCCUPATION_PROGRAMS[o.name] || []).filter(Boolean);
+    const linked = (OCCUPATION_PROGRAMS_BY_SOC[o.soc] || OCCUPATION_PROGRAMS[o.name] || []).filter(Boolean);
     const programs = (o.program || '').split('|').map(x => x.trim()).filter(Boolean);
     const explicitLinks = linked.filter(name => programs.includes(name)).length;
     // Explicit occupation-to-program/transfer-field mappings are stronger
@@ -918,7 +924,7 @@ function renderResults(scores, ranked){
   const addUnique = (page, o, programCap = Infinity) => {
     const program = primaryProgram(o);
     const programCount = page.filter(item => primaryProgram(item) === program).length;
-    if(page.length < 10 && !usedOccupationNames.has(o.name) && programCount < programCap){
+    if(!usedOccupationNames.has(o.name) && programCount < programCap){
       usedOccupationNames.add(o.name);
       page.push(o);
       return true;
@@ -926,8 +932,9 @@ function renderResults(scores, ranked){
     return false;
   };
   const addCandidates = (page, candidates, programCap = 1) => {
+    // First diversify by Collin program, then include every remaining match.
     candidates.forEach(o => addUnique(page, o, programCap));
-    if(page.length < 10) candidates.forEach(o => addUnique(page, o));
+    candidates.forEach(o => addUnique(page, o));
   };
 
   const fullCodeRanking = occupationPool.map(o => {
@@ -995,15 +1002,35 @@ function renderResults(scores, ranked){
     if(candidate && addUnique(broaderPage, candidate)){
       const program = primaryProgram(candidate);
       broaderProgramCounts.set(program, (broaderProgramCounts.get(program) || 0) + 1);
+      return true;
     }
+    return false;
   };
-  for(let round=0; round<5; round++){
-    singleLetterRankings.forEach(addBalancedCandidate);
+  // Keep alternating between the leading interests until neither ranking has
+  // another distinct occupation, rather than stopping after an arbitrary 5 rounds.
+  let addedInRound = true;
+  while(addedInRound){
+    addedInRound = singleLetterRankings.reduce((added, ranking) =>
+      addBalancedCandidate(ranking) || added, false);
   }
 
-  const occupationPages = [fullCodePage, topPairPage, broaderPage];
-  const occupationPageLabels = ['Your full interest pattern', 'Matches across all three interest pairs', 'Broader matches to your leading interests'];
-  const shownOccupations = occupationPages.flat();
+  // Preserve the three familiar result tiers, but split long tiers into groups
+  // of 10 so every eligible match remains reachable with the existing controls.
+  const occupationTiers = [
+    {items:fullCodePage, label:'Your full interest pattern'},
+    {items:topPairPage, label:'Matches across all three interest pairs'},
+    {items:broaderPage, label:'Broader matches to your leading interests'}
+  ];
+  const occupationPages = occupationTiers.flatMap(tier => {
+    const chunks = [];
+    for(let i=0; i<tier.items.length; i+=10) chunks.push(tier.items.slice(i, i+10));
+    if(!chunks.length) chunks.push([]);
+    return chunks.map((items,index) => ({
+      items,
+      label: chunks.length > 1 ? `${tier.label} · Group ${index+1} of ${chunks.length}` : tier.label
+    }));
+  });
+  const shownOccupations = occupationTiers.flatMap(tier => tier.items);
   selectedOccupationNames = new Set();
   const occList = document.getElementById('occList');
   const occMoreBtn = document.getElementById('occMoreBtn');
@@ -1014,7 +1041,7 @@ function renderResults(scores, ranked){
   function renderOccupationPage(){
     currentOccupationPage = occupationPage;
     const page = occupationPages[occupationPage];
-    occList.innerHTML = page.length ? page.map((o,idx) => {
+    occList.innerHTML = page.items.length ? page.items.map((o,idx) => {
       const encodedName = encodeURIComponent(o.name);
       return `<div class="occ-item">
         <input type="checkbox" class="consider-toggle" id="occ-toggle-${occupationPage}-${idx}" data-occupation="${encodedName}" aria-label="I'm considering ${o.name}" title="I'm considering this"${selectedOccupationNames.has(encodedName) ? ' checked' : ''}>
@@ -1026,7 +1053,7 @@ function renderResults(scores, ranked){
         </a>
       </div>`;
     }).join('') : '<div class="occ-empty">No distinct occupations in the Collin-aligned list meet this exact matching level. Use More to continue to the next set.</div>';
-    occPageStatus.textContent = `Set ${occupationPage + 1} of ${occupationPages.length} · ${occupationPageLabels[occupationPage]} · ${page.length} match${page.length === 1 ? '' : 'es'}`;
+    occPageStatus.textContent = `Set ${occupationPage + 1} of ${occupationPages.length} · ${page.label} · ${page.items.length} match${page.items.length === 1 ? '' : 'es'}`;
     occBackBtn.hidden = occupationPage === 0;
     occMoreBtn.hidden = occupationPage === occupationPages.length - 1;
   }
@@ -1340,8 +1367,10 @@ function restoreResumeLink(){
       const input = card.querySelector('.consider-toggle');
       if(input) input.checked = selectedPrograms.has(name);
     });
-    const page = Math.max(0,Math.min(2,Number.isInteger(state.page) ? state.page : 0));
-    for(let i=0;i<page;i++) document.getElementById('occMoreBtn').click();
+    const page = Math.max(0,Number.isInteger(state.page) ? state.page : 0);
+    // Page counts can now exceed three because long tiers are split into groups of 10.
+    for(let i=0;i<page && !document.getElementById('occMoreBtn').hidden;i++)
+      document.getElementById('occMoreBtn').click();
     document.querySelectorAll('#occList [data-occupation]').forEach(input => input.checked = selectedOccupationNames.has(input.dataset.occupation));
     updateProgramHighlights();
     document.getElementById('resumeStatus').textContent = 'Your saved results and selections have been restored. You can keep exploring and generate a new link at any time.';
